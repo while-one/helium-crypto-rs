@@ -1,11 +1,15 @@
 //! Crypto primitives used by various [Helium][HELIUM] blockchain and wallet services.
 //!
-//! The library exposes both [Elliptic Curve (ECC)][ECC] NIST P-256 (secp256r1),
-//! and ED25519 keypairs based on the excellent work done by the
-//! [RustCrypto][RUSTCRYPTO] and [Dalek cryptography][DALEK] projects.
+//! The library exposes [Elliptic Curve (ECC)][ECC] NIST P-256 (secp256r1),
+//! [Certicom's SECG SEC2][SEC2] K-256 (secp256k1), and ED25519 keypairs based
+//! on the excellent work done by the [RustCrypto][RUSTCRYPTO] and
+//! [Dalek cryptography][DALEK] projects.
 //!
-//! ECC keypairs keys implement the strategy described in a [Victor Miller
-//! paper][JIVSOV] which compresses keys to just their X-coordinate.
+//! The secp256r1 public keys currently representable on the Helium blockchain
+//! are only those that satisfy the "ECC Compact" strategy described in a
+//! [Victor Miller paper][JIVSOV], which compresses keys to just their
+//! X-coordinate. For this reason, such keys are called "ecc_compact" rather
+//! than "secp256r1".
 //!
 //! The intended implemenation strategy in this crate allows for keypair
 //! implementations where the private key is based external to the software,
@@ -17,11 +21,14 @@
 //!
 //! [ECC]: http://oid-info.com/get/1.2.840.10045.3.1.7
 //!
+//! [SEC2]: https://www.secg.org/sec2-v2.pdf
+//!
 //! [JIVSOV]: https://tools.ietf.org/html/draft-jivsov-ecc-compact-05
 //!
 //! [HELIUM]: https://helium.com
 pub mod ecc_compact;
 pub mod ed25519;
+pub mod secp256k1;
 
 pub mod error;
 pub mod public_key;
@@ -56,6 +63,7 @@ impl Default for Network {
 /// The default key type is ed25519.
 #[derive(Debug, PartialEq, Clone)]
 pub enum KeyType {
+    Secp256k1,
     Ed25519,
     EccCompact,
 }
@@ -138,6 +146,7 @@ impl FromStr for KeyType {
     type Err = Error;
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
+            KEYTYPE_SECP256K1_STR => Ok(Self::Secp256k1),
             KEYTYPE_ED25519_STR => Ok(Self::Ed25519),
             KEYTYPE_ECC_COMPACT_STR => Ok(Self::EccCompact),
             _ => Err(Error::invalid_keytype_str(s)),
@@ -148,6 +157,7 @@ impl FromStr for KeyType {
 impl fmt::Display for KeyType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::result::Result<(), fmt::Error> {
         f.write_str(match self {
+            Self::Secp256k1 => KEYTYPE_SECP256K1_STR,
             Self::Ed25519 => KEYTYPE_ED25519_STR,
             Self::EccCompact => KEYTYPE_ECC_COMPACT_STR,
         })
@@ -158,6 +168,7 @@ impl TryFrom<u8> for KeyType {
     type Error = Error;
     fn try_from(v: u8) -> Result<Self> {
         match v & 0xF {
+            KEYTYPE_SECP256K1 => Ok(Self::Secp256k1),
             KEYTYPE_ED25519 => Ok(Self::Ed25519),
             KEYTYPE_ECC_COMPACT => Ok(Self::EccCompact),
             _ => Err(Error::invalid_keytype(v)),
@@ -170,14 +181,24 @@ impl From<KeyType> for u8 {
         match v {
             KeyType::EccCompact => KEYTYPE_ECC_COMPACT,
             KeyType::Ed25519 => KEYTYPE_ED25519,
+            KeyType::Secp256k1 => KEYTYPE_SECP256K1,
         }
     }
 }
 
+/// The type tag for encoded secp256k1 keys.
+pub const KEYTYPE_SECP256K1: u8 = 0x03;
+/// The type tag for multisig keys.
+pub const KEYTYPE_MULTISIG: u8 = 0x02;
 /// The type tag for encoded ed25519 keys.
 pub const KEYTYPE_ED25519: u8 = 0x01;
 // The type tag for encoded ecc_compact keys
 pub const KEYTYPE_ECC_COMPACT: u8 = 0x00;
+
+/// The string representation of the secp256k1 key type
+pub const KEYTYPE_SECP256K1_STR: &str = "secp256k1";
+/// The string representation of the multisig key type
+pub const KEYTYPE_MULTISIG_STR: &str = "multisig";
 /// The string representation of the ed25519 key type
 pub const KEYTYPE_ED25519_STR: &str = "ed25519";
 /// The string representation of the ecc_compact key type

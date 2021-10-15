@@ -36,6 +36,7 @@ pub struct PublicKey {
 pub(crate) enum PublicKeyRepr {
     EccCompact(ecc_compact::PublicKey),
     Ed25519(ed25519::PublicKey),
+    Secp256k1(secp256k1::PublicKey),
 }
 
 impl Eq for PublicKey {}
@@ -45,6 +46,7 @@ impl PublicKeySize for PublicKeyRepr {
         match self {
             Self::EccCompact(key) => key.public_key_size(),
             Self::Ed25519(key) => key.public_key_size(),
+            Self::Secp256k1(key) => key.public_key_size(),
         }
     }
 }
@@ -96,6 +98,7 @@ impl TryFrom<&[u8]> for PublicKeyRepr {
         match KeyType::try_from(bytes[0])? {
             KeyType::EccCompact => Ok(Self::EccCompact(ecc_compact::PublicKey::try_from(bytes)?)),
             KeyType::Ed25519 => Ok(Self::Ed25519(ed25519::PublicKey::try_from(bytes)?)),
+            KeyType::Secp256k1 => Ok(Self::Secp256k1(secp256k1::PublicKey::try_from(bytes)?)),
         }
     }
 }
@@ -112,6 +115,7 @@ impl IntoBytes for PublicKeyRepr {
         match self {
             Self::EccCompact(key) => key.bytes_into(output),
             Self::Ed25519(key) => key.bytes_into(output),
+            Self::Secp256k1(key) => key.bytes_into(output),
         }
     }
 }
@@ -128,6 +132,12 @@ impl From<ed25519::PublicKey> for PublicKeyRepr {
     }
 }
 
+impl From<secp256k1::PublicKey> for PublicKeyRepr {
+    fn from(v: secp256k1::PublicKey) -> Self {
+        Self::Secp256k1(v)
+    }
+}
+
 impl Verify for PublicKey {
     fn verify(&self, msg: &[u8], signature: &[u8]) -> Result {
         self.inner.verify(msg, signature)
@@ -137,6 +147,7 @@ impl Verify for PublicKey {
 impl Verify for PublicKeyRepr {
     fn verify(&self, msg: &[u8], signature: &[u8]) -> Result {
         match self {
+            Self::Secp256k1(key) => key.verify(msg, signature),
             Self::Ed25519(key) => key.verify(msg, signature),
             Self::EccCompact(key) => key.verify(msg, signature),
         }
@@ -151,6 +162,12 @@ impl From<ecc_compact::PublicKey> for PublicKey {
 
 impl From<ed25519::PublicKey> for PublicKey {
     fn from(v: ed25519::PublicKey) -> Self {
+        Self::for_network(Network::MainNet, v)
+    }
+}
+
+impl From<secp256k1::PublicKey> for PublicKey {
+    fn from(v: secp256k1::PublicKey) -> Self {
         Self::for_network(Network::MainNet, v)
     }
 }
@@ -227,6 +244,7 @@ impl PublicKey {
         let key_type = match self.inner {
             PublicKeyRepr::EccCompact(..) => KeyType::EccCompact,
             PublicKeyRepr::Ed25519(..) => KeyType::Ed25519,
+            PublicKeyRepr::Secp256k1(..) => KeyType::Secp256k1,
         };
         KeyTag {
             network: self.network,
@@ -249,6 +267,21 @@ mod tests {
             KeyTag {
                 network: Network::MainNet,
                 key_type: KeyType::EccCompact
+            }
+        );
+        assert_eq!(public_key.to_string(), B58.to_string())
+    }
+
+    #[test]
+    fn k256p1_roundtrip() {
+        // This is a valid b58 encoded secp256k1 key
+        const B58: &str = "1SpLY6fic4fGthLGjeAUdLVNVYk1gJGrWTGhsukm2dnELaSEQmhL";
+        let public_key: PublicKey = B58.parse().expect("public key");
+        assert_eq!(
+            public_key.key_tag(),
+            KeyTag {
+                network: Network::MainNet,
+                key_type: KeyType::Secp256k1,
             }
         );
         assert_eq!(public_key.to_string(), B58.to_string())

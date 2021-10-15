@@ -10,6 +10,7 @@ pub trait Sign {
 
 #[derive(PartialEq, Debug)]
 pub enum Keypair {
+    Secp256k1(secp256k1::Keypair),
     Ed25519(ed25519::Keypair),
     EccCompact(ecc_compact::Keypair),
 }
@@ -17,6 +18,7 @@ pub enum Keypair {
 impl Sign for Keypair {
     fn sign(&self, msg: &[u8]) -> Result<Vec<u8>> {
         match self {
+            Self::Secp256k1(keypair) => keypair.sign(msg),
             Self::Ed25519(keypair) => keypair.sign(msg),
             Self::EccCompact(keypair) => keypair.sign(msg),
         }
@@ -33,6 +35,7 @@ impl Keypair {
                 Self::EccCompact(ecc_compact::Keypair::generate(key_tag.network, csprng))
             }
             KeyType::Ed25519 => Self::Ed25519(ed25519::Keypair::generate(key_tag.network, csprng)),
+            KeyType::Secp256k1 => Self::Secp256k1(secp256k1::Keypair::generate(key_tag.network, csprng)),
         }
     }
 
@@ -45,11 +48,16 @@ impl Keypair {
                 key_tag.network,
                 entropy,
             )?)),
+            KeyType::Secp256k1 => Ok(Self::Secp256k1(secp256k1::Keypair::generate_from_entropy(
+                key_tag.network,
+                entropy,
+            )?)),
         }
     }
 
     pub fn key_tag(&self) -> KeyTag {
         match self {
+            Self::Secp256k1(keypair) => keypair.key_tag(),
             Self::Ed25519(keypair) => keypair.key_tag(),
             Self::EccCompact(keypair) => keypair.key_tag(),
         }
@@ -57,6 +65,7 @@ impl Keypair {
 
     pub fn public_key(&self) -> &PublicKey {
         match self {
+            Self::Secp256k1(keypair) => &keypair.public_key,
             Self::Ed25519(keypair) => &keypair.public_key,
             Self::EccCompact(keypair) => &keypair.public_key,
         }
@@ -64,6 +73,7 @@ impl Keypair {
 
     pub fn to_vec(&self) -> Vec<u8> {
         match self {
+            Self::Secp256k1(keypair) => keypair.to_vec(),
             Self::Ed25519(keypair) => keypair.to_vec(),
             Self::EccCompact(keypair) => keypair.to_vec(),
         }
@@ -71,9 +81,16 @@ impl Keypair {
 
     pub fn secret_to_vec(&self) -> Result<Vec<u8>> {
         match self {
+            Self::Secp256k1(keypair) => keypair.secret_to_vec(),
             Self::Ed25519(keypair) => keypair.secret_to_vec(),
             Self::EccCompact(keypair) => keypair.secret_to_vec(),
         }
+    }
+}
+
+impl From<secp256k1::Keypair> for Keypair {
+    fn from(keypair: secp256k1::Keypair) -> Self {
+        Self::Secp256k1(keypair)
     }
 }
 
@@ -94,6 +111,7 @@ impl TryFrom<&[u8]> for Keypair {
 
     fn try_from(input: &[u8]) -> Result<Self> {
         match KeyType::try_from(input[0])? {
+            KeyType::Secp256k1 => Ok(secp256k1::Keypair::try_from(input)?.into()),
             KeyType::Ed25519 => Ok(ed25519::Keypair::try_from(input)?.into()),
             KeyType::EccCompact => Ok(ecc_compact::Keypair::try_from(input)?.into()),
         }
@@ -122,6 +140,18 @@ mod tests {
             .public_key()
             .verify(b"hello world", &signature)
             .is_ok())
+    }
+
+    #[test]
+    fn bytes_roundtrip_secp256k1() {
+        bytes_roundtrip(KeyTag {
+            network: Network::MainNet,
+            key_type: KeyType::Secp256k1,
+        });
+        bytes_roundtrip(KeyTag {
+            network: Network::TestNet,
+            key_type: KeyType::Secp256k1,
+        });
     }
 
     #[test]
