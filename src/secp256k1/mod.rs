@@ -176,7 +176,7 @@ impl IntoBytes for PublicKey {
             .0
             .as_affine()
             .to_encoded_point(true);
-        output.copy_from_slice(&encoded.as_bytes()[..])
+        output.copy_from_slice(encoded.as_bytes())
     }
 }
 
