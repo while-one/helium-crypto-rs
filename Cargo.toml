@@ -13,7 +13,7 @@ serde = "1"
 rand_core = { version = "0.6", features = ["getrandom"] }
 ed25519-dalek = { git = "https://github.com/helium/ed25519-dalek", branch = "madninja/bump_rand" }
 p256 = { git = "https://github.com/helium/elliptic-curves", branch="madninja/compact_point_impl", default-features=false, features=["arithmetic", "ecdsa", "sha256", "zeroize", "ecdh"] }
-ecc608-linux = {  git = "https://github.com/while-one/testing.git", rev="5a01294931fabc49b596a950be0ce4b6efad3cc3", optional = true}
+ecc608-linux = {  git = "https://github.com/while-one/testing.git", branch="dev", optional = true}
 
 [features]
 default = []
